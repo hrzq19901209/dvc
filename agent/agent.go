@@ -1,9 +1,8 @@
-package main
+package agent
 
 import (
 	"bughunter.com/dvc/config"
 	"encoding/json"
-	"fmt"
 	log "github.com/Sirupsen/logrus"
 	"github.com/coreos/etcd/client"
 	"golang.org/x/net/content"
@@ -13,6 +12,7 @@ import (
 type AgentInfo struct {
 	IP       string `json:"ip"`
 	Hostname string `json:"hostname"`
+	Cluster  string `json:"cluster"`
 }
 
 type Agent struct{}
@@ -21,11 +21,12 @@ func HeartBeat(config *config.Config) {
 	api := client.NewKeysAPI(config.Etcd)
 
 	for {
-		key := fmt.Sprintf("agents/%s/%s", config.Cluster, config.Hostname)
+		key := fmt.Sprintf("agents/%s", config.Hostname)
 
 		info := &Agent{
 			IP:       config.IP,
 			Hostname: config.Hostname,
+			Cluster:  config.Cluster,
 		}
 		value, _ := json.Marshal(info)
 		_, err = api.Set(context.Background(), key, string(value), &client.SetOptions{
