@@ -1,11 +1,14 @@
-package agent
+package main
 
 import (
 	"bughunter.com/dvc/config"
 	"encoding/json"
+	"fmt"
 	log "github.com/Sirupsen/logrus"
 	"github.com/coreos/etcd/client"
-	"golang.org/x/net/content"
+	"github.com/mikespook/golib/signal"
+	"golang.org/x/net/context"
+	"os"
 	"time"
 )
 
@@ -23,18 +26,18 @@ func HeartBeat(config *config.Config) {
 	for {
 		key := fmt.Sprintf("agents/%s", config.Hostname)
 
-		info := &Agent{
+		info := &AgentInfo{
 			IP:       config.IP,
 			Hostname: config.Hostname,
 			Cluster:  config.Cluster,
 		}
 		value, _ := json.Marshal(info)
-		_, err = api.Set(context.Background(), key, string(value), &client.SetOptions{
+		_, err := api.Set(context.Background(), key, string(value), &client.SetOptions{
 			TTL: time.Second * 30,
 		})
 
 		if err != nil {
-			log.Errorf("Warning: update workerInfo &s", err)
+			log.Errorf("Warning: update workerInfo %s", err)
 		}
 		time.Sleep(time.Second * 3)
 	}
@@ -45,4 +48,11 @@ func NewAgent() *Agent {
 	agent := &Agent{}
 	go HeartBeat(config)
 	return agent
+}
+
+func main() {
+	config.LoadConfig("agent.conf")
+	NewAgent()
+	signal.Bind(os.Interrupt, func() uint { return signal.BreakExit })
+	signal.Wait()
 }

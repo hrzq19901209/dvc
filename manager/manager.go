@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	log "github.com/Sirupsen/logrus"
 	"github.com/coreos/etcd/client"
-	"golang.org/x/net/content"
+	"golang.org/x/net/context"
 	"time"
 )
 
@@ -36,7 +36,18 @@ type Manager struct {
 	members map[string]*Member
 }
 
-func (m *Manager) addWorker(info *agent.AgentInfo) {
+func NewManager() *Manager {
+	m := &Manager{
+		members: make(map[string]*Member),
+	}
+	go m.watchAgents()
+	return m
+}
+
+func (m *Manager) GetMembers() map[string]*Member {
+	return m.members
+}
+func (m *Manager) addMember(info *agent.AgentInfo) {
 	member := &Member{
 		IP:       info.IP,
 		Hostname: info.Hostname,
@@ -48,7 +59,7 @@ func (m *Manager) addWorker(info *agent.AgentInfo) {
 }
 
 func (m *Manager) updateAgent(info *agent.AgentInfo) {
-	member := m.members[m.Hostname]
+	member := m.members[info.Hostname]
 	member.IP = info.IP
 	member.Hostname = info.Hostname
 	member.Cluster = info.Cluster
@@ -59,7 +70,7 @@ func (m *Manager) nodeToAgentInfo(node *client.Node) *agent.AgentInfo {
 	info := &agent.AgentInfo{}
 	err := json.Unmarshal([]byte(node.Value), info)
 	if err != nil {
-		log.Errorf(err)
+		log.Errorf("client.Node to AgentInfo fails: %s", err)
 	}
 	return info
 }
@@ -86,9 +97,9 @@ func (m *Manager) watchAgents() {
 		} else if res.Action == "set" {
 			info := m.nodeToAgentInfo(res.Node)
 			if _, ok := m.members[info.Hostname]; ok {
-				m.upadteAgent(info)
+				m.updateAgent(info)
 			} else {
-				m.addAgent(info)
+				m.addMember(info)
 			}
 		}
 	}
