@@ -6,8 +6,10 @@ import (
 	"fmt"
 	log "github.com/Sirupsen/logrus"
 	"github.com/coreos/etcd/client"
+	dockerclient "github.com/docker/engine-api/client"
 	"github.com/mikespook/golib/signal"
 	"golang.org/x/net/context"
+	"net/rpc"
 	"os"
 	"time"
 )
@@ -18,7 +20,14 @@ type AgentInfo struct {
 	Cluster  string `json:"cluster"`
 }
 
-type Agent struct{}
+type Agent struct {
+	Cli dockerclient
+}
+
+type Reply struct {
+	OK  string
+	Msg string
+}
 
 func HeartBeat(config *config.Config) {
 	api := client.NewKeysAPI(config.Etcd)
@@ -45,14 +54,36 @@ func HeartBeat(config *config.Config) {
 
 func NewAgent() *Agent {
 	config := config.GetConfig()
-	agent := &Agent{}
+	defaultHeaders := map[string]string{"User-Agent": "engine-api-cli-1.0"}
+	cli, err := client.NewClient("unix:///var/run/docker.sock", "v1.12", nil, defaultHeaders)
+	if err != nil {
+		panic(err)
+	}
+	agent := &Agent{
+		Cli: cli,
+	}
 	go HeartBeat(config)
 	return agent
 }
 
+func (agent *Agent) ListenRPC() {
+	rpc.Register(NewAgent())
+	rpc.HandleHTTP()
+	conn, err := net.Listen("tcp", ":4200")
+	if err != nil {
+		log.Errorf("Error: listen 4200 error", err)
+	}
+	go http.Serve(conn, nil)
+}
+
+func (agent *Agent) BuildImage(buildContext io.Reader, reply *Reply) {
+
+}
+
 func main() {
 	config.LoadConfig("agent.conf")
-	NewAgent()
+	agent := NewAgent()
+	agent.ListenRPC()
 	signal.Bind(os.Interrupt, func() uint { return signal.BreakExit })
 	signal.Wait()
 }
